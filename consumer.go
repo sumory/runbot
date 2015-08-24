@@ -39,9 +39,7 @@ func main() {
 	workers.Process("get_queue", Get, 10)
 	workers.Process("post_queue", Post, 10)
 
-
 	go workers.StatsServer(8080)
 
-	// Blocks until process is told to exit via unix signal
 	workers.Run()
 }

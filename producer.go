@@ -17,20 +17,20 @@ func main() {
 	})
 
 
+	go func() {
+	for {
+		time.Sleep(2*time.Second)
+		workers.Enqueue("get_queue", "Get", map[string]interface{}{
+			"harId":"abc",
+			"harCotent":map[string]interface{}{
+				"url":"http://baidu.com",
+				"headers":"abc",
+			},
+		})
+	}
+	}()
 
-		for {
-			time.Sleep(2*time.Second)
-			workers.Enqueue("get_queue", "Get", map[string]interface{}{
-				"harId":"abc",
-				"harCotent":map[string]interface{}{
-					"url":"http://baidu.com",
-					"headers":"abc",
-				},
-			})
-		}
-
-
-	go func(){
+	go func() {
 		for {
 			time.Sleep(3*time.Second)
 			workers.Enqueue("post_queue", "Post", []int{1, 2})
