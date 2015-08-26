@@ -1,11 +1,11 @@
-package main
+package test
 
 
 import (
 	"github.com/jrallison/go-workers"
 	"time"
 	"encoding/json"
-	"./common"
+	"github.com/sumory/runbot/common"
 )
 
 var getHar = `
@@ -71,7 +71,7 @@ var postHar = `
 `
 
 
-func main() {
+func test() {
 	workers.Configure(map[string]string{
 		"server":  "192.168.100.185:6389",
 		"database":  "0",

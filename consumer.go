@@ -4,11 +4,15 @@ package main
 import (
 	"github.com/jrallison/go-workers"
 	"fmt"
-	"github.com/sumory/go_relation/common"
+	"./common"
+	"encoding/json"
 )
 
 func Get(message *workers.Msg) {
-	fmt.Printf("%+v\n", message)
+	var getHar = new(common.Har)
+	argsString := message.Args().ToJson()
+	json.Unmarshal([]byte(argsString), getHar)//解析称get类型的har
+	fmt.Printf("after unmarshal: %+v\n", getHar)
 }
 
 
