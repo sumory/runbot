@@ -17,5 +17,4 @@ target
 node_modules
 myconf
 trash
-src/main/resources/profiles/myself
 dump.rdb

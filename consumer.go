@@ -9,7 +9,7 @@ import (
 )
 
 func Get(message *workers.Msg) {
-	var getHar = new(common.Har)
+	var getHar = new(common.StatusAPI)
 	argsString := message.Args().ToJson()
 	json.Unmarshal([]byte(argsString), getHar)//解析称get类型的har
 	fmt.Printf("after unmarshal: %+v\n", getHar)

@@ -8,7 +8,7 @@ import (
 )
 
 
-func do(har *common.Har)func(){
+func do(har *common.StatusAPI)func(){
 	return func(){
 		e,har,statusCode, r:=common.RunHar(har)
 		fmt.Println(common.Current(), e, har.HarId, statusCode, r)
@@ -26,7 +26,7 @@ func main() {
 
 	for e := hars.Front(); e != nil; e = e.Next() {
 		element := e.Value
-		h := element.(*common.Har)
+		h := element.(*common.StatusAPI)
 		fmt.Printf("%+v\n", h)
 
 		taskId, _ := tw.Loop(2*time.Second, do(h))

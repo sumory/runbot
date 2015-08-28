@@ -14,7 +14,7 @@ func main() {
 
 	for e := hars.Front(); e != nil; e = e.Next() {
 		element := e.Value
-		h := element.(*common.Har)
+		h := element.(*common.StatusAPI)
 
 		if h.Type=="POST"{
 

@@ -1,140 +1,98 @@
 package common
+
+
 import (
-	"net/http"
-	"io/ioutil"
 	"fmt"
-	"errors"
-	"net/url"
-	"strings"
-	"io"
+	"time"
+	"strconv"
+	"gopkg.in/mgo.v2"
 )
 
+var TW *TimeWheel
+var DB *mgo.Database
+var RunningMap map[string]int64
+var MyConfig *Config
 
-func RunHar(har *Har) (err error, h *Har, statusCode int, responseBody string) {
-	if har.Type=="GET" {
-		e, s, r := runGetHar(har)
-		return e, har, s, strings.TrimRight(r,"\n")
-	}else if har.Type=="POST" {
-		e, s, r := runPostHar(har)
-		return e, har, s,  strings.TrimRight(r,"\n")
-	}else {
-		return errors.New("unsupports http method"), har, 0, ""
+func InitContext(c *Config){
+	MyConfig = c
+	DB = NewMongo(c)
+	RunningMap = make(map[string]int64)
+	TW = NewTimeWheel(50*time.Millisecond, 20, 500)
+}
+
+func do(db *mgo.Database, api *StatusAPI) func() {
+	return func() {
+		t1:=time.Now().UnixNano()
+		e, har, statusCode, response := RunStatusAPI(api)
+		if MyConfig.LOG_Debug{
+			fmt.Println(Current(), e, har.Id, statusCode,response)
+		}else{
+			fmt.Println(Current(), e, har.Id, statusCode)
+		}
+		t2:=time.Now().UnixNano()
+
+		log :=&StatusAPILog{
+			StatusAPIId: api.Id,
+			StatusCode :statusCode,
+			Spent :t2-t1,
+			UserId:api.UserId,
+			Response :response,
+			Date:time.Now(),
+		}
+		SaveStatusAPILog(db, log)
 	}
 }
 
-func runGetHar(har *Har) (err error, statusCode int, result string) {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("##RunGetHar error: %v\n", r)
-			if _, ok := r.(error); ok {
-				err = r.(error)
-			}else {
-				err = errors.New("runGetHar undefined error")
-			}
+func StartRunAll() {
+	apis := GetAllStatusApi(DB)
+	fmt.Printf("目前总共有%d个要运行的Status API \n", apis.Len())
+
+	for e := apis.Front(); e != nil; e = e.Next() {
+		element := e.Value
+		api := element.(*StatusAPI)
+		fmt.Printf("api: %+v\n", api)
+
+		cron, err := strconv.Atoi(api.Cron)
+		if err!=nil {
+			fmt.Printf("error to parse `cron` of status api: %s\n", api.Id)
+			continue
 		}
-	}()
 
-	client := &http.Client{}
-	getContent := har.GetContent
-
-	req, errRequest := http.NewRequest("GET", getContent.Url, nil)
-	if errRequest!=nil {
-		return errRequest, 0, ""
+		timeDuration := time.Duration(int64(cron*1000) * int64(time.Millisecond))
+		taskId, _ := TW.Loop(timeDuration, do(DB, api))
+		RunningMap[api.Id] = taskId
+		fmt.Printf("初始化开启任务, apiId: %s taskId: %d \n", api.Id, taskId)
 	}
-
-	if getContent.Headers!=nil && len(getContent.Headers)>0 {
-		var headers []KV = getContent.Headers
-		for _, header := range headers {
-			req.Header.Set(header.Name, header.Value)
-		}
-	}
-
-	if getContent.Cookies!=nil && len(getContent.Cookies)>0 {
-		var cookies []KV = getContent.Cookies
-		var cookieStr = ""
-		for _, cookie := range cookies {
-			cookieStr+=cookie.Name+"="+cookie.Value+";"
-		}
-		req.Header.Set("cookie", cookieStr)
-	}
-
-	resp, err := client.Do(req)
-	defer resp.Body.Close()
-
-	body, errReadAll := ioutil.ReadAll(resp.Body)
-
-	if errReadAll!=nil {
-		return errReadAll, 0, ""
-	}
-
-	return nil, resp.StatusCode, string(body)
 }
 
+func StartRun(statusAPIId string){
+	StopRun(statusAPIId)//先停止
 
 
-func runPostHar(har *Har) (err error, statusCode int, result string) {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("##RunPostHar error: %v \n", r)
-			if _, ok := r.(error); ok {
-				err = r.(error)
-			}else {
-				err = errors.New("runPostHar undefined error")
-			}
+	api := GetStatusApi(DB, statusAPIId)
+	fmt.Printf("要开启的任务: %+v\n", api)
+
+	if api!=nil && api.Id!=""{
+		cron, err := strconv.Atoi(api.Cron)
+		if err!=nil {
+			fmt.Printf("开启任务失败, apiId: %s \n", api.Id)
+		}else{
+			timeDuration := time.Duration(int64(cron*1000) * int64(time.Millisecond))
+			taskId, _ := TW.Loop(timeDuration, do(DB, api))
+			RunningMap[api.Id] = taskId
+			fmt.Printf("开启任务成功, apiId: %s taskId: %d \n", api.Id, taskId)
+
 		}
-	}()
-
-	client := &http.Client{}
-	postContent := har.PostContent
-
-	ps := url.Values{}
-	var body io.ReadCloser
-
-	var postData = postContent.PostData
-	if postData.MimeType == "application/x-www-form-urlencoded" ||  postData.MimeType == "multipart/form-data" {
-		if postData.Params!=nil && len(postData.Params)>0 {
-			var params []KV = postData.Params
-			for _, p := range params {
-				ps.Set(p.Name, p.Value)
-			}
-		}
-		body = ioutil.NopCloser(strings.NewReader(ps.Encode())) //把form数据编下码
-	}else if postData.MimeType=="application/json" {
-		body = ioutil.NopCloser(strings.NewReader(postData.Text))
+	}else{
+		fmt.Printf("找不到要开启的任务, apiId: %s \n", statusAPIId)
 	}
+}
 
-
-	req, errRequest := http.NewRequest("POST", postContent.Url, body)
-	if errRequest!=nil {
-		return errRequest, 0, ""
+func StopRun(statusAPIId string){
+	if taskId,ok := RunningMap[statusAPIId];ok{
+		TW.Remove(taskId)
+		fmt.Printf("停止任务, apiId: %s taskId: %d \n",statusAPIId, taskId)
+	}else{
+		fmt.Printf("找不到要停止的任务, apiId: %s \n",statusAPIId)
 	}
-
-
-	if postContent.Headers!=nil && len(postContent.Headers)>0 {
-		var headers []KV = postContent.Headers
-		for _, header := range headers {
-			req.Header.Set(header.Name, header.Value)
-		}
-	}
-
-	if postContent.Cookies!=nil && len(postContent.Cookies)>0 {
-		var cookies []KV = postContent.Cookies
-		var cookieStr = ""
-		for _, cookie := range cookies {
-			cookieStr+=cookie.Name+"="+cookie.Value+";"
-		}
-		req.Header.Set("cookie", cookieStr)
-	}
-
-	resp, err := client.Do(req)
-	defer resp.Body.Close()
-
-	r, errReadAll := ioutil.ReadAll(resp.Body)
-
-	if errReadAll!=nil {
-		return errReadAll, 0, ""
-	}
-
-
-	return nil, resp.StatusCode, string(r)
 }

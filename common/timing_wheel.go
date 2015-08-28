@@ -188,8 +188,9 @@ func (self *TimeWheel) Loop(timeout time.Duration, do func()) (int64, chan bool)
 
 	self.lock.Lock()
 	slots := self.wheel[idx]
-	ttl := int(int64(timeout) / (int64(self.tickPeriod) * int64(self.ticksPerwheel)))
-	// log.Debug("After|TTL:%d|%d\n", ttl, timeout)
+	ttl := int(int64(timeout) / (int64(self.tickPeriod) * int64(self.ticksPerwheel-1)))
+	fmt.Printf("timeout %d tickPeriod %d  ticksPerwheel %d  ttl %d \n", timeout, self.tickPeriod, self.ticksPerwheel, ttl)
+
 	id := self.timerId(idx)
 	job := &slotJob{
 		id :id,
